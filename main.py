@@ -1,5 +1,4 @@
 import asyncio
-from re import L
 from typing import Any
 
 from azure.core.credentials import AccessToken
