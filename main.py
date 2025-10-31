@@ -6,6 +6,8 @@ from azure.core.credentials import AccessToken
 from azure.identity import ChainedTokenCredential
 from msal import PublicClientApplication
 from msgraph.generated.models.channel import Channel
+from msgraph.generated.models.chat_message import ChatMessage
+from msgraph.generated.models.item_body import ItemBody
 from msgraph.generated.models.team import Team
 from msgraph.graph_service_client import GraphServiceClient
 
@@ -65,8 +67,54 @@ async def print_info(client: GraphServiceClient):
         print(f"Error: {e}")
 
 
+def get_channel_ids(channels: list[Channel], channel_names: list[str]) -> list[str]:
+    channel_ids: list[str] = []
+
+    for channel in channels:
+        if channel.display_name in channel_names:
+            channel_ids.append(str(channel.id))
+
+    return channel_ids
+
+
+async def send_message(client: GraphServiceClient, request: ChatMessage, team_id: str, channel_id: str):
+    await client.teams.by_team_id(team_id).channels.by_channel_id(channel_id).messages.post(request)
+
+
+async def send_messages(client: GraphServiceClient, message: str, team_name: str, channel_names: list[str]):
+    channel_ids: list[str] = []
+    team_id: str = ""
+
+    for team in await get_teams(client):
+        if team.display_name == team_name:
+            channels = await get_channels(client, str(team.id))
+            team_id = str(team.id)
+            channel_ids = get_channel_ids(channels, channel_names)
+
+    if not team_id:
+        print("Incorrect team name")
+        return
+
+    if not channel_ids:
+        print("No channel name matched")
+        return
+
+    tasks = [
+        asyncio.create_task(send_message(client, ChatMessage(body=ItemBody(content=message)), team_id, channel_id))
+        for channel_id in channel_ids
+    ]
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    for channel_id, result in zip(channel_ids, results):
+        if isinstance(result, Exception):
+            print(f"Channel {channel_id}: error: {result}")
+        else:
+            print(f"Channel {channel_id}: message sent")
+
+
 async def main():
-    scopes: list[str] = ["User.Read", "Team.ReadBasic.All", "ChannelSettings.Read.All"]
+    scopes: list[str] = ["User.Read", "Team.ReadBasic.All", "ChannelSettings.Read.All", "ChannelMessage.Send"]
     token_provider: MSALTokenProvider = MSALTokenProvider(
         client_id="87ba2a96-9fd0-4f8d-baff-89be50ff47ec",
         authority="https://login.microsoftonline.com/de3281e0-76b3-4f2e-a1e7-412b1b6cbfe6",
@@ -75,7 +123,8 @@ async def main():
 
     client = GraphServiceClient(credentials=token_provider, scopes=scopes)
 
-    await print_info(client)
+    # await print_info(client)
+    await send_messages(client, "Iter test", "PZSP2", ["General", "kanał 2"])
 
 
 if __name__ == "__main__":
