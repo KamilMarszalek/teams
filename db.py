@@ -100,9 +100,7 @@ class Database:
                 self.conn.close()
 
     def __enter__(self) -> Self:
-        print("enter")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-        print("exit")
